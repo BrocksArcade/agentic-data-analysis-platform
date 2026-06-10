@@ -1,0 +1,17 @@
+{
+  "name": "agentic-data-analysis-platform",
+  "version": "1.0.0",
+  "description": "Backend for agentic data analysis platform",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "turbo": "^1.13.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

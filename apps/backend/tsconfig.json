@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2021",
+    "lib": ["ES2021"],
+    "declaration": true,
+    "outDir": "./dist",
+    "baseUrl": "./src",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "node",
+    "paths": {
+      "@platform/shared": ["../../packages/shared/src"],
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"],
+  "watchOptions": {
+    "watchFile": "fixedPollingInterval",
+    "watchDirectory": "fixedPollingInterval",
+    "fallbackPolling": "fixedinterval",
+    "synchronousWatchDirectory": true
+  }
+}
