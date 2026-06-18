@@ -312,6 +312,8 @@ export class MainGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     this.logger.log(`[CHARTS:LIST] convId=${payload.conversationId}`);
     try {
+      // Drop any charts saved without a renderable contract before returning.
+      await this.duckdbService.deleteInvalidCharts(payload.conversationId);
       const charts = await this.duckdbService.listCharts(payload.conversationId);
       client.emit('charts:listed', {
         charts: charts.map((c) => ({
@@ -335,6 +337,9 @@ export class MainGateway implements OnGatewayConnection, OnGatewayDisconnect {
     payload: { chartId: string },
   ) {
     this.logger.log(`[CHART:DELETE] chartId=${payload.chartId}`);
+    if (!payload.chartId) {
+      return client.emit('chart:delete:error', { message: 'Missing chartId' });
+    }
     try {
       await this.duckdbService.deleteChart(payload.chartId);
       client.emit('chart:deleted', { chartId: payload.chartId });

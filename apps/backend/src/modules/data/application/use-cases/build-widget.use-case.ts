@@ -69,8 +69,9 @@ export class BuildWidgetUseCase {
     const xCol = q(spec.xColumn);
     const yColumns = spec.yColumns.map((y) => q(y));
 
-    // Determine if we need aggregation (GROUP BY)
-    const needsAggregation = spec.aggregation && ['sum', 'avg', 'min', 'max'].includes(spec.aggregation);
+    // Determine if we need aggregation (GROUP BY). Count is an aggregate too.
+    const needsAggregation =
+      !!spec.aggregation && ['sum', 'avg', 'min', 'max', 'count'].includes(spec.aggregation);
 
     // Chart type rules
     if (spec.chartType === 'pie') {
@@ -82,7 +83,7 @@ export class BuildWidgetUseCase {
       }
 
       const aggFunc = this.aggToSql(spec.aggregation!);
-      let sql = `SELECT ${xCol} AS x, ${aggFunc}(${yColumns[0]}) AS y FROM ${tableName} GROUP BY ${xCol} ORDER BY ${xCol}`;
+      let sql = `SELECT ${xCol} AS x, ${aggFunc}(${yColumns[0]}) AS y0 FROM ${tableName} GROUP BY ${xCol} ORDER BY ${xCol}`;
       if (spec.limit) sql += ` LIMIT ${spec.limit}`;
       return sql;
     }
@@ -106,7 +107,7 @@ export class BuildWidgetUseCase {
     // bar, line: support both aggregated and raw
     if (needsAggregation && (spec.chartType === 'bar' || spec.chartType === 'line')) {
       const aggFunc = this.aggToSql(spec.aggregation!);
-      const yParts = yColumns.map((y) => `${aggFunc}(${y}) AS ${y}`);
+      const yParts = yColumns.map((y, i) => `${aggFunc}(${y}) AS y${i}`);
       let sql = `SELECT ${xCol} AS x, ${yParts.join(', ')} FROM ${tableName} GROUP BY ${xCol} ORDER BY ${xCol}`;
       if (spec.limit) sql += ` LIMIT ${spec.limit}`;
       return sql;
@@ -142,14 +143,12 @@ export class BuildWidgetUseCase {
       };
     }
 
-    const xData = rows.map((r) => r.x);
-    const series = spec.yColumns.map((yCol, idx) => {
-      const key = spec.yColumns.length === 1 ? 'y' : `y${idx}`;
-      return {
-        name: yCol,
-        data: rows.map((r) => r[key] ?? r[yCol]),
-      };
-    });
+    const xData = rows.map((r) => r.x ?? r[spec.xColumn]);
+    const series = spec.yColumns.map((yCol, idx) => ({
+      name: yCol,
+      // Aggregated/raw queries alias to y0,y1,...; table selects original names.
+      data: rows.map((r) => r[`y${idx}`] ?? r[yCol]),
+    }));
 
     return {
       chartType: spec.chartType,

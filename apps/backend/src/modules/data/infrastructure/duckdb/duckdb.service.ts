@@ -228,4 +228,18 @@ export class DuckDBService implements OnModuleInit {
       [chartId],
     );
   }
+
+  /**
+   * Remove charts that were persisted without a renderable contract (e.g. from
+   * failed AI runs or earlier bugs). Cleans them by conversation, not by id —
+   * some legacy rows have no usable chart_id.
+   */
+  async deleteInvalidCharts(conversationId: string): Promise<void> {
+    await this.run(
+      `DELETE FROM charts
+       WHERE conversation_id = ?
+         AND (contract IS NULL OR contract = '' OR chart_id IS NULL)`,
+      [conversationId],
+    );
+  }
 }

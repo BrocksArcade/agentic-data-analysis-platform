@@ -51,3 +51,29 @@ export function compatibleColumns(
   const accepts = axis === 'x' ? rule.xAccepts : rule.yAccepts;
   return schema.filter((col) => accepts.includes(col.kind));
 }
+
+export type KindFilter = 'all' | 'numeric' | 'categorical' | 'temporal';
+
+export const KIND_FILTERS: { value: KindFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'numeric', label: 'Number' },
+  { value: 'categorical', label: 'Text' },
+  { value: 'temporal', label: 'Date / time' },
+];
+
+/** The user picks the type; we show only columns of that type (or all). */
+export function columnsByKind(
+  schema: ColumnSchema[],
+  filter: KindFilter,
+): ColumnSchema[] {
+  if (filter === 'all') return schema;
+  return schema.filter((col) => col.kind === filter);
+}
+
+/** Default type filter to the kind this chart/axis usually expects. */
+export function defaultKindFilter(chartType: string, axis: 'x' | 'y'): KindFilter {
+  const rule = AXIS_RULES[chartType];
+  const accepts = axis === 'x' ? rule?.xAccepts : rule?.yAccepts;
+  if (!accepts || accepts.length !== 1) return 'all';
+  return accepts[0];
+}

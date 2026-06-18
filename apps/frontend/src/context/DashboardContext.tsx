@@ -184,12 +184,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
     socket.on('charts:listed', (data: any) => {
       const all = data.charts || [];
-      // Self-heal: prune any chart saved without a renderable contract
-      // (e.g. from failed AI runs) so it can't blank the dashboard.
-      all
-        .filter((c: any) => !c?.contract?.chartType)
-        .forEach((c: any) => socket.emit('chart:delete', { chartId: c.chartId }));
-
+      // The backend already prunes charts without a renderable contract;
+      // render only valid ones (belt-and-suspenders).
       const chartWidgets = all
         .filter((c: any) => c?.contract?.chartType)
         .map((c: any) => ({
