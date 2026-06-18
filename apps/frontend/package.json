@@ -13,6 +13,7 @@
     "@platform/shared": "file:../../packages/shared",
     "@types/react-plotly.js": "^2.6.4",
     "plotly.js": "^3.6.0",
+    "plotly.js-dist-min": "^3.6.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-plotly.js": "^2.6.0",

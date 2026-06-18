@@ -20,7 +20,14 @@ export class LoadConversationUseCase {
 
     this.ensureTempDir();
     const tempPath = this.getTempPath(conversationId, conversation.file_name);
-    fs.writeFileSync(tempPath, conversation.parquet_file);
+    const fileData = conversation.parquet_file;
+    const fileBuffer = this.toBuffer(fileData);
+    if (fileBuffer.length === 0) {
+      throw new Error(
+        `Conversation ${conversationId} has an empty/corrupt data blob`,
+      );
+    }
+    fs.writeFileSync(tempPath, fileBuffer);
 
     const tableName = DuckDBService.sanitizeTableName(conversation.file_name);
     await this.duckdbService.loadParquetToTable(tableName, tempPath);
@@ -92,6 +99,28 @@ export class LoadConversationUseCase {
     }
 
     return { columnMappings, knownFacts, userPreferences };
+  }
+
+  /**
+   * Reconstruct a Buffer from whatever shape the DuckDB BLOB comes back as.
+   * DuckDBService.sanitize() JSON-round-trips every row, so a Node Buffer is
+   * serialized to `{ type: 'Buffer', data: [...] }` and a Uint8Array to a
+   * plain `{ '0': n, '1': n, ... }` object. Handle all of these.
+   */
+  private toBuffer(fileData: any): Buffer {
+    if (Buffer.isBuffer(fileData)) return fileData;
+    if (fileData instanceof Uint8Array) return Buffer.from(fileData);
+    if (
+      fileData &&
+      fileData.type === 'Buffer' &&
+      Array.isArray(fileData.data)
+    ) {
+      return Buffer.from(fileData.data);
+    }
+    if (fileData && typeof fileData === 'object') {
+      return Buffer.from(Object.values(fileData) as number[]);
+    }
+    return Buffer.alloc(0);
   }
 
   private ensureTempDir() {

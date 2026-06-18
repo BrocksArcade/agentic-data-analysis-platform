@@ -91,7 +91,8 @@ Step 3: {"name": "submit_data", "input": {"schema": "<from step1>", "queryResult
     tableName: string,
     explorationData: { schema: string; queryResults: any[]; rowCount: number; notes: string },
   ): string {
-    const resultsPreview = JSON.stringify(explorationData.queryResults.slice(0, 20), null, 2);
+    // Only a few sample rows — the model needs the shape, not the full set.
+    const resultsPreview = JSON.stringify(explorationData.queryResults.slice(0, 3), null, 2);
     return `You are a data visualization strategist. Given the user's question and the raw data below, decide EXACTLY what visualization to build.
 
 ## User Question
@@ -155,6 +156,37 @@ ${resultsJson}
 
 ## Required JSON Shape (output this exactly, filled in):
 {"chartType":"${intention.chartType}","title":"${intention.title}","xAxis":{"label":"${intention.xAxisLabel}","data":[]},"series":[{"name":"${intention.seriesName}","data":[]}],"summary":"${intention.insights}","rawData":[]}`;
+  }
+
+  // ── Phase 3: Chart Mapper ─────────────────────────────────────────────────
+  // The model sees only a few sample rows and the column list, and returns a
+  // tiny field→role mapping. The code then applies it to every row, so we never
+  // feed/return the full result set through the LLM.
+  buildChartMapperPrompt(
+    intention: VisualizationIntention,
+    columns: string[],
+    sampleRows: any[],
+  ): string {
+    const xHint =
+      intention.chartType === 'pie'
+        ? 'the category/label column'
+        : intention.chartType === 'scatter'
+          ? 'the numeric column for the x-axis'
+          : 'the category/label/time column for the x-axis';
+    return `Map the result columns to a "${intention.chartType}" chart. Output ONLY JSON, no data.
+
+Columns: ${columns.join(', ')}
+Sample rows (just for context, do NOT echo them): ${JSON.stringify(sampleRows)}
+
+Desired x-axis label: "${intention.xAxisLabel}"
+Desired series name: "${intention.seriesName}"
+
+Rules:
+- "xField": ${xHint}. Must be one of the columns above.
+- "series": the numeric value column(s) to plot. Each has a short "name" and a "field" (one of the columns above).
+
+Output exactly this shape:
+{"xField":"<column>","series":[{"name":"<label>","field":"<column>"}]}`;
   }
 
   // ── SQL Fixer (Phase 3 retry) ─────────────────────────────────────────────

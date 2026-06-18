@@ -13,9 +13,9 @@ export class OllamaService {
   private readonly logger = new Logger(OllamaService.name);
   readonly baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 
-  readonly explorationModel = process.env.OLLAMA_EXPLORATION_MODEL || 'qwen2.5:7b-instruct-q2_K';
-  readonly thinkingModel = process.env.OLLAMA_THINKING_MODEL || 'gemma4:e4b';
-  readonly codegenModel = process.env.OLLAMA_CODEGEN_MODEL || 'qwen2.5:7b-instruct-q2_K';
+  readonly explorationModel = process.env.OLLAMA_EXPLORATION_MODEL || 'analyst';
+  readonly thinkingModel = process.env.OLLAMA_THINKING_MODEL || 'analyst';
+  readonly codegenModel = process.env.OLLAMA_CODEGEN_MODEL || 'analyst';
 
   private readonly maxHistory = 10;
 

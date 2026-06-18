@@ -1,18 +1,22 @@
 import { useState, useRef } from 'react';
+import { useTheme } from '../context/ThemeContext';
 
 interface InputAreaProps {
-  disabled: boolean;
-  isFileLoaded: boolean;
   onSendMessage: (text: string) => void;
-  onFileUpload: (file: File) => void;
+  onFileUpload?: (file: File) => void;
+  disabled?: boolean;
+  isFileLoaded?: boolean;
+  compact?: boolean;
 }
 
 export default function InputArea({
-  disabled,
-  isFileLoaded,
   onSendMessage,
   onFileUpload,
+  disabled = false,
+  isFileLoaded = true,
+  compact = false,
 }: InputAreaProps) {
+  const { theme } = useTheme();
   const [input, setInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,30 +41,41 @@ export default function InputArea({
     }
   };
 
+  const bgClass = compact ? 'bg-white dark:bg-dark-800' : theme === 'dark' ? 'bg-dark-800' : 'bg-gray-50';
+  const borderClass = theme === 'dark' ? 'border-dark-700' : 'border-gray-200';
+  const inputBgClass = theme === 'dark'
+    ? 'bg-dark-700 text-white placeholder-dark-500'
+    : 'bg-white text-gray-900 placeholder-gray-500 border border-gray-300';
+  const buttonClass = theme === 'dark'
+    ? 'bg-dark-700 hover:bg-dark-600 text-gray-400'
+    : 'bg-gray-200 hover:bg-gray-300 text-gray-600';
+
   return (
-    <div className="border-t border-dark-700 bg-dark-800 p-4">
-      <div className="flex gap-3">
-        {/* File Upload Button */}
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={disabled}
-          className="flex-shrink-0 p-2 rounded-lg bg-dark-700 hover:bg-dark-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          title="Upload CSV file"
-        >
-          <svg
-            className="w-5 h-5 text-dark-300"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+    <div className={`border-t ${borderClass} ${bgClass} ${compact ? 'p-3' : 'p-4'}`}>
+      <div className="flex gap-2">
+        {/* File Upload Button - only show if not compact */}
+        {!compact && onFileUpload && (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled}
+            className={`flex-shrink-0 p-2 rounded-lg ${buttonClass} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+            title="Upload CSV file"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-        </button>
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+          </button>
+        )}
 
         {/* Text Input */}
         <textarea
@@ -68,17 +83,17 @@ export default function InputArea({
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={handleKeyPress}
           disabled={disabled || !isFileLoaded}
-          placeholder={isFileLoaded ? 'Ask a question about your data...' : 'Upload a file first to start chatting...'}
-          className="flex-1 bg-dark-700 rounded-lg px-4 py-2 text-white placeholder-dark-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          placeholder={isFileLoaded ? 'Ask a question...' : 'Upload a file first...'}
+          className={`flex-1 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${inputBgClass}`}
           rows={1}
-          style={{ minHeight: '40px', maxHeight: '120px' }}
+          style={{ minHeight: '36px', maxHeight: '100px' }}
         />
 
         {/* Send Button */}
         <button
           onClick={handleSend}
           disabled={disabled || !isFileLoaded || !input.trim()}
-          className="flex-shrink-0 p-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex-shrink-0 p-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           title="Send message"
         >
           <svg
@@ -92,13 +107,15 @@ export default function InputArea({
       </div>
 
       {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,.parquet"
-        onChange={handleFileChange}
-        className="hidden"
-      />
+      {onFileUpload && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.parquet"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+      )}
     </div>
   );
 }

@@ -1,0 +1,43 @@
+# ⚡ OPTIMIZED FOR: AMD Ryzen 7 4800H + RTX 3050 Laptop
+# 15GB RAM | 16 Cores | NVIDIA RTX 3050 4GB VRAM
+#
+# NOTE: Ollama does NOT accept inline comments after a PARAMETER value
+# (it parses the whole rest of the line as the value). Keep comments on
+# their own lines. Removed `gpu_memory` and `top_n_tokens` — neither is a
+# valid Ollama Modelfile parameter (they caused "invalid int value" errors).
+
+# Base on a model we ALREADY have locally (no download). This wraps the
+# existing qwen weights with the resource tuning below.
+FROM qwen2.5:7b-instruct-q2_K
+
+# 🚀 GPU ACCELERATION (RTX 3050)
+# Offload layers to the GPU; partial offload + CPU keeps it within 4GB VRAM.
+PARAMETER num_gpu 25
+# Use the NVIDIA GPU.
+PARAMETER main_gpu 0
+
+# 💻 CPU THREADING (16-core Ryzen 7) — use 14/16 cores, reserve 2 for OS.
+PARAMETER num_thread 14
+
+# 🧠 MODEL PARAMETERS (FAST INFERENCE)
+# Larger context for better understanding (2x default).
+PARAMETER num_ctx 4096
+# Lower temperature = faster, more consistent decisions.
+PARAMETER temperature 0.5
+# Balanced diversity.
+PARAMETER top_k 50
+# Nucleus sampling for coherent output.
+PARAMETER top_p 0.85
+# Avoid repetition.
+PARAMETER repeat_penalty 1.0
+
+# ⚡ INFERENCE SPEED OPTIMIZATION
+# Reproducible (skips variance calc).
+PARAMETER seed 42
+# Max output length. 2048 (not 512) so chart-generation JSON with rawData
+# rows isn't truncated; still bounded to keep responses fast.
+PARAMETER num_predict 2048
+# 🛑 SAFETY STOPS (prevent rambling)
+PARAMETER stop "User:"
+PARAMETER stop "<|end|>"
+PARAMETER stop "\n\nUser:"

@@ -7,7 +7,7 @@ const Database = require('duckdb').Database;
 @Injectable()
 export class DuckDBService implements OnModuleInit {
   private db: any;
-  private dbPath = process.env.DUCKDB_PATH || '/data/main.duckdb';
+  private dbPath = process.env.DUCKDB_PATH || './data/main.duckdb';
 
   async onModuleInit() {
     this.ensureDataDir();
@@ -33,6 +33,17 @@ export class DuckDBService implements OnModuleInit {
           summary VARCHAR,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS charts (
+          chart_id VARCHAR PRIMARY KEY,
+          conversation_id VARCHAR NOT NULL,
+          user_id VARCHAR,
+          chart_type VARCHAR NOT NULL,
+          title VARCHAR NOT NULL,
+          source VARCHAR NOT NULL,
+          config VARCHAR,
+          contract VARCHAR,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
     } catch (err: any) {
@@ -178,5 +189,43 @@ export class DuckDBService implements OnModuleInit {
     } catch (err) {
       // Silent fail for cleanup
     }
+  }
+
+  async listConversations(userId: string): Promise<any[]> {
+    const result = await this.run(
+      `SELECT conversation_id, file_name, created_at FROM conversations WHERE user_id = ? ORDER BY created_at DESC`,
+      [userId],
+    );
+    return result;
+  }
+
+  async createChart(chart: any): Promise<void> {
+    const { chartId, conversationId, userId, chartType, title, source, config, contract } = chart;
+    await this.run(
+      `INSERT INTO charts (chart_id, conversation_id, user_id, chart_type, title, source, config, contract)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [chartId, conversationId, userId, chartType, title, source,
+        config ? JSON.stringify(config) : null,
+        contract ? JSON.stringify(contract) : null],
+    );
+  }
+
+  async listCharts(conversationId: string): Promise<any[]> {
+    const result = await this.run(
+      `SELECT * FROM charts WHERE conversation_id = ? ORDER BY created_at ASC`,
+      [conversationId],
+    );
+    return result.map((row: any) => ({
+      ...row,
+      config: row.config ? JSON.parse(row.config) : null,
+      contract: row.contract ? JSON.parse(row.contract) : null,
+    }));
+  }
+
+  async deleteChart(chartId: string): Promise<void> {
+    await this.run(
+      `DELETE FROM charts WHERE chart_id = ?`,
+      [chartId],
+    );
   }
 }

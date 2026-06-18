@@ -12,6 +12,7 @@ import { FinalAnswerTool } from './infrastructure/tools/final-answer.tool';
 import { SubmitDataTool } from './infrastructure/tools/submit-data.tool';
 import { GenerateSummaryUseCase } from './application/use-cases/generate-summary.use-case';
 import { RunAgentLoopUseCase } from './application/use-cases/run-agent-loop.use-case';
+import { ChartMapperService } from './application/services/chart-mapper.service';
 import { DataCoreModule } from '../data/data.module';
 
 @Module({
@@ -29,6 +30,7 @@ import { DataCoreModule } from '../data/data.module';
     SubmitDataTool,
     ToolsRegistry,
     GenerateSummaryUseCase,
+    ChartMapperService,
     RunAgentLoopUseCase,
   ],
   exports: [

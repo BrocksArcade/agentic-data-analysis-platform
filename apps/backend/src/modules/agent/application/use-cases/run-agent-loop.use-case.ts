@@ -5,6 +5,7 @@ import { OllamaService } from '../../infrastructure/ollama/ollama.service';
 import { ToolsRegistry } from '../../infrastructure/tools/tools.registry';
 import { DuckDBService } from '../../../data/infrastructure/duckdb/duckdb.service';
 import { GenerateSummaryUseCase } from './generate-summary.use-case';
+import { ChartMapperService } from '../services/chart-mapper.service';
 
 interface ExplorationResult {
   schema: string;
@@ -26,6 +27,7 @@ export class RunAgentLoopUseCase {
     private toolsRegistry: ToolsRegistry,
     private duckdbService: DuckDBService,
     private generateSummary: GenerateSummaryUseCase,
+    private chartMapper: ChartMapperService,
   ) {}
 
   async execute(
@@ -194,13 +196,32 @@ export class RunAgentLoopUseCase {
         }
       }
 
-      explorationMessages.push({ role: 'tool', content: JSON.stringify(toolResult) });
+      explorationMessages.push({ role: 'tool', content: JSON.stringify(this.sampleToolResult(toolResult)) });
     }
 
     // Max iterations reached — copy messages and return empty exploration
     this.logger.warn(`[PHASE1] max iterations reached without submit_data`);
     session.messages.push(...explorationMessages.slice(1));
     return { schema: '', queryResults: [], rowCount: 0, notes: 'Exploration reached iteration limit' };
+  }
+
+  /**
+   * Cap row arrays in a tool result before feeding it back to the model: it
+   * only needs 2-3 rows to understand the shape, never the full set. The real
+   * data is re-queried in Phase 3 for the chart. Prevents 100+ rows from
+   * ballooning the exploration prompt (the cause of ~100s exploration calls).
+   */
+  private readonly modelSampleRows = 3;
+  private sampleToolResult(toolResult: any): any {
+    if (toolResult && Array.isArray(toolResult.rows) && toolResult.rows.length > this.modelSampleRows) {
+      const total = toolResult.count ?? toolResult.rows.length;
+      return {
+        ...toolResult,
+        rows: toolResult.rows.slice(0, this.modelSampleRows),
+        note: `showing ${this.modelSampleRows} of ${total} rows (full data is queried later for the chart)`,
+      };
+    }
+    return toolResult;
   }
 
   // ── Phase 2 ──────────────────────────────────────────────────────────────
@@ -210,7 +231,7 @@ export class RunAgentLoopUseCase {
     tableName: string,
     exploration: ExplorationResult,
   ): Promise<VisualizationIntention | null> {
-    this.logger.log(`[PHASE2] calling gemma4:e4b (think=true) for visualization intention`);
+    this.logger.log(`[PHASE2] calling ${this.ollamaService.thinkingModel} for visualization intention`);
 
     const intentionContext = this.promptBuilder.buildIntentionPrompt(question, tableName, exploration);
 
@@ -219,9 +240,11 @@ export class RunAgentLoopUseCase {
       response = await this.ollamaService.chat(
         'You are a data visualization strategist. Output ONLY a JSON object — no explanation, no markdown.',
         [{ role: 'user', content: intentionContext }],
-        { model: this.ollamaService.thinkingModel, think: true, timeoutMs: 180000 },
+        // think disabled: the qwen thinking model is not a reasoning model, and
+        // large thinking models (gemma4:e4b) OOM the RTX 3050's 4GB VRAM.
+        { model: this.ollamaService.thinkingModel, think: false, timeoutMs: 180000 },
       );
-      this.logger.log(`[PHASE2] gemma responded (${response.length} chars)`);
+      this.logger.log(`[PHASE2] thinking model responded (${response.length} chars)`);
       this.logger.debug(`[PHASE2] raw intention response: ${response}`);
     } catch (err: any) {
       this.logger.error(`[PHASE2] gemma call failed: ${err.message}`);
@@ -283,39 +306,12 @@ export class RunAgentLoopUseCase {
       }
     }
 
-    // Ask qwen to format the result into a ChartContract
-    const formatterContext = this.promptBuilder.buildChartFormatterPrompt(intention, sqlResults);
-
-    let response: string;
-    try {
-      response = await this.ollamaService.chat(
-        'You are a JSON formatter. Output ONLY valid JSON — no explanation, no markdown.',
-        [{ role: 'user', content: formatterContext }],
-        { model: this.ollamaService.codegenModel, timeoutMs: 60000 },
-      );
-      this.logger.log(`[PHASE3] qwen responded (${response.length} chars)`);
-    } catch (err: any) {
-      this.logger.error(`[PHASE3] qwen call failed: ${err.message}`);
-      return this.programmaticChart(intention, sqlResults);
-    }
-
-    const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      this.logger.warn(`[PHASE3] no JSON in qwen response — using programmatic formatter`);
-      return this.programmaticChart(intention, sqlResults);
-    }
-
-    try {
-      const contract = JSON.parse(jsonMatch[0]) as ChartContract;
-      if (!contract.chartType) throw new Error('missing chartType');
-      contract.rawData = contract.rawData?.length ? contract.rawData : sqlResults;
-      this.logger.log(`[PHASE3] chart contract built: type=${contract.chartType}`);
-      return contract;
-    } catch {
-      this.logger.warn(`[PHASE3] JSON parse failed — using programmatic formatter`);
-      return this.programmaticChart(intention, sqlResults);
-    }
+    // Build the contract via the mapper: the model produces only a tiny
+    // field→role mapping from a few sample rows, then the code shapes ALL rows.
+    // The full result set is never fed to / re-emitted by the LLM.
+    const contract = await this.chartMapper.buildContract(intention, sqlResults);
+    this.logger.log(`[PHASE3] chart contract built: type=${contract.chartType} rows=${sqlResults.length}`);
+    return contract;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

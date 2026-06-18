@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import * as dotenv from 'dotenv';
+dotenv.config();
 import { NestFactory } from '@nestjs/core';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
@@ -16,5 +18,4 @@ async function bootstrap() {
   console.log(`Server listening on port ${port}`);
   console.log(`DuckDB file at: ${dbPath}`);
 }
-
 bootstrap();

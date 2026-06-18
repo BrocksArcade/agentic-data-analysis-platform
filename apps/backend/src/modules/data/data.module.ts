@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { DuckDBService } from './infrastructure/duckdb/duckdb.service';
 import { IngestParquetUseCase } from './application/use-cases/ingest-parquet.use-case';
 import { LoadConversationUseCase } from './application/use-cases/load-conversation.use-case';
+import { BuildWidgetUseCase } from './application/use-cases/build-widget.use-case';
 import { MainGateway } from './infrastructure/gateway/main.gateway';
 import { AgentModule } from '../agent/agent.module';
 
@@ -10,11 +11,13 @@ import { AgentModule } from '../agent/agent.module';
     DuckDBService,
     IngestParquetUseCase,
     LoadConversationUseCase,
+    BuildWidgetUseCase,
   ],
   exports: [
     DuckDBService,
     IngestParquetUseCase,
     LoadConversationUseCase,
+    BuildWidgetUseCase,
   ],
 })
 export class DataCoreModule {}

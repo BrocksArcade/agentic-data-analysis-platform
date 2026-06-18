@@ -7,3 +7,12 @@ dist/
 tmp/
 /data/
 /tmp/
+
+# Turbo cache & local DuckDB data
+.turbo/
+.vscode/
+apps/backend/data/
+apps/backend/tmp/
+
+# Generated sample dataset (reproduce via generate_sample_data.py)
+sample_data.csv

@@ -1,58 +1,88 @@
-import { Conversation } from '../App';
+import { useState, useRef } from 'react';
+import { useDashboard } from '../context/DashboardContext';
+import { useTheme } from '../context/ThemeContext';
+import { ChevronIcon, PlusIcon } from './icons';
 
-interface SidebarProps {
-  conversations: Conversation[];
-  currentConversationId: string | null;
-  onNewConversation: () => void;
-  onSelectConversation: (id: string) => void;
-}
+export default function Sidebar() {
+  const { conversations, currentConversationId, selectConversation, handleFileUpload } = useDashboard();
+  const { theme } = useTheme();
+  const [collapsed, setCollapsed] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-export default function Sidebar({
-  conversations,
-  currentConversationId,
-  onNewConversation,
-  onSelectConversation,
-}: SidebarProps) {
+  const bgClass = theme === 'dark' ? 'bg-dark-800' : 'bg-white';
+  const borderClass = theme === 'dark' ? 'border-dark-700' : 'border-gray-200';
+  const textClass = theme === 'dark' ? 'text-white' : 'text-gray-900';
+
   return (
-    <div className="w-64 bg-dark-800 border-r border-dark-700 flex flex-col h-full">
+    <div
+      className={`${bgClass} ${borderClass} border-r flex flex-col h-full transition-all duration-300 overflow-hidden`}
+      style={{ width: collapsed ? '60px' : '280px' }}
+    >
       {/* Header */}
-      <div className="p-4 border-b border-dark-700">
+      <div className={`${borderClass} border-b p-4 flex items-center justify-between gap-2`}>
+        {!collapsed && <h2 className={`text-lg font-bold ${textClass}`}>Data Analysis</h2>}
         <button
-          onClick={onNewConversation}
-          className="w-full px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+          onClick={() => setCollapsed(!collapsed)}
+          className="p-1 rounded hover:bg-gray-200 dark:hover:bg-dark-700 transition"
+          title={collapsed ? 'Expand' : 'Collapse'}
         >
-          <span>+</span>
-          <span>New Chat</span>
+          <ChevronIcon dir={collapsed ? 'right' : 'left'} className="w-5 h-5" />
         </button>
+      </div>
+
+      {/* New Dashboard Button */}
+      <div className="p-3">
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg ${
+            theme === 'dark'
+              ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+              : 'bg-indigo-500 hover:bg-indigo-600 text-white'
+          } transition-colors text-sm font-medium`}
+          title="Upload a new dataset"
+        >
+          <PlusIcon className="w-4 h-4 flex-shrink-0" />
+          {!collapsed && <span>New Dataset</span>}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.parquet"
+          onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+          className="hidden"
+        />
       </div>
 
       {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {conversations.map((conv) => (
-          <button
-            key={conv.id}
-            onClick={() => onSelectConversation(conv.id)}
-            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate ${
-              currentConversationId === conv.id
-                ? 'bg-dark-700 text-white'
-                : 'text-dark-300 hover:bg-dark-700 hover:text-white'
-            }`}
-            title={conv.name}
-          >
-            {conv.name}
-          </button>
-        ))}
+      <div className={`flex-1 overflow-y-auto p-2 space-y-1`}>
+        {conversations.length === 0 ? (
+          !collapsed && (
+            <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} p-2 text-center`}>
+              No conversations yet
+            </p>
+          )
+        ) : (
+          conversations.map((conv) => (
+            <button
+              key={conv.conversationId}
+              onClick={() => selectConversation(conv.conversationId)}
+              className={`w-full text-left px-2 py-2 rounded text-sm transition-colors truncate ${
+                currentConversationId === conv.conversationId
+                  ? theme === 'dark'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-indigo-100 text-indigo-900'
+                  : theme === 'dark'
+                  ? 'text-gray-300 hover:bg-dark-700'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+              title={conv.fileName}
+            >
+              {!collapsed && <span>{conv.fileName}</span>}
+            </button>
+          ))
+        )}
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-dark-700 p-4 space-y-2">
-        <button className="w-full px-4 py-2 text-dark-300 hover:text-white text-sm rounded-lg hover:bg-dark-700 transition-colors">
-          Settings
-        </button>
-        <button className="w-full px-4 py-2 text-dark-300 hover:text-white text-sm rounded-lg hover:bg-dark-700 transition-colors">
-          Help
-        </button>
-      </div>
     </div>
   );
 }

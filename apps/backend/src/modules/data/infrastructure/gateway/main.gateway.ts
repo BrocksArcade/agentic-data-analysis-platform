@@ -8,10 +8,13 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { SessionMemory } from '@platform/shared';
+import { randomUUID } from 'crypto';
 import { IngestParquetUseCase } from '../../application/use-cases/ingest-parquet.use-case';
 import { LoadConversationUseCase } from '../../application/use-cases/load-conversation.use-case';
+import { BuildWidgetUseCase } from '../../application/use-cases/build-widget.use-case';
 import { RunAgentLoopUseCase } from '../../../agent/application/use-cases/run-agent-loop.use-case';
 import { DuckDBService } from '../duckdb/duckdb.service';
+import { describeToSchema } from '../../application/services/column-kind.util';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class MainGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -24,6 +27,7 @@ export class MainGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private ingestParquet: IngestParquetUseCase,
     private loadConversation: LoadConversationUseCase,
+    private buildWidget: BuildWidgetUseCase,
     private runAgentLoop: RunAgentLoopUseCase,
     private duckdbService: DuckDBService,
   ) {}
@@ -131,11 +135,15 @@ export class MainGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.sessions.set(payload.conversationId, session);
       this.logger.log(`[UPLOAD:COMPLETE] session created convId=${payload.conversationId}`);
 
+      const describeRows = await this.duckdbService.describeTable(result.tableName);
+      const schema = describeToSchema(describeRows);
+
       client.emit('upload:ready', {
         conversationId: payload.conversationId,
         tableName: result.tableName,
         columns: result.columns,
         rowCount: result.rowCount,
+        schema,
       });
 
       this.uploadBuffers.delete(payload.conversationId);
@@ -163,12 +171,19 @@ export class MainGateway implements OnGatewayConnection, OnGatewayDisconnect {
         payload.conversationId,
       );
 
+      const describeRows = await this.duckdbService.describeTable(session.tableName);
+      const schema = describeToSchema(describeRows);
+
       this.logger.log(`[CONVERSATION:OPEN] loaded convId=${payload.conversationId} file=${conversation.file_name}`);
       client.emit('conversation:loaded', {
         conversationId: payload.conversationId,
         fileName: conversation.file_name,
         summary: conversation.summary || '',
+        schema,
       });
+
+      const charts = await this.duckdbService.listCharts(payload.conversationId);
+      client.emit('charts:listed', { charts });
     } catch (err: any) {
       this.logger.error(`[CONVERSATION:OPEN] ERROR convId=${payload.conversationId} err=${err.message}`);
       client.emit('upload:error', { message: err.message });
@@ -214,6 +229,118 @@ export class MainGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (err: any) {
       this.logger.error(`[AGENT:QUERY] ERROR convId=${payload.conversationId} err=${err.message}`, err.stack);
       client.emit('agent:error', { message: err.message });
+    }
+  }
+
+  @SubscribeMessage('conversations:list')
+  async handleConversationsList(
+    client: Socket,
+    payload: { userId: string },
+  ) {
+    this.logger.log(`[CONVERSATIONS:LIST] userId=${payload.userId}`);
+    try {
+      const conversations = await this.duckdbService.listConversations(payload.userId);
+      client.emit('conversations:listed', {
+        conversations: conversations.map((c) => ({
+          conversationId: c.conversation_id,
+          fileName: c.file_name,
+          createdAt: c.created_at,
+        })),
+      });
+    } catch (err: any) {
+      this.logger.error(`[CONVERSATIONS:LIST] ERROR userId=${payload.userId} err=${err.message}`);
+      client.emit('conversations:list:error', { message: err.message });
+    }
+  }
+
+  @SubscribeMessage('widget:build')
+  async handleWidgetBuild(
+    client: Socket,
+    payload: { conversationId: string; spec: any },
+  ) {
+    this.logger.log(`[WIDGET:BUILD] convId=${payload.conversationId} chartType=${payload.spec.chartType}`);
+    try {
+      const session = this.sessions.get(payload.conversationId);
+      if (!session) {
+        this.logger.warn(`[WIDGET:BUILD] no session for convId=${payload.conversationId}`);
+        return client.emit('widget:error', {
+          message: 'Conversation not loaded',
+          spec: payload.spec,
+        });
+      }
+
+      const chart = await this.buildWidget.execute(session.tableName, payload.spec);
+      client.emit('widget:built', { spec: payload.spec, chart });
+    } catch (err: any) {
+      this.logger.error(`[WIDGET:BUILD] ERROR convId=${payload.conversationId} err=${err.message}`);
+      client.emit('widget:error', {
+        message: err.message,
+        spec: payload.spec,
+      });
+    }
+  }
+
+  @SubscribeMessage('chart:save')
+  async handleChartSave(
+    client: Socket,
+    payload: { conversationId: string; userId: string; chart: any },
+  ) {
+    this.logger.log(`[CHART:SAVE] convId=${payload.conversationId}`);
+    try {
+      const chartId = randomUUID();
+      await this.duckdbService.createChart({
+        chartId,
+        conversationId: payload.conversationId,
+        userId: payload.userId,
+        chartType: payload.chart.chartType,
+        title: payload.chart.title,
+        source: payload.chart.source,
+        config: payload.chart.config,
+        contract: payload.chart.contract,
+      });
+      client.emit('chart:saved', { chartId });
+    } catch (err: any) {
+      this.logger.error(`[CHART:SAVE] ERROR convId=${payload.conversationId} err=${err.message}`);
+      client.emit('chart:save:error', { message: err.message });
+    }
+  }
+
+  @SubscribeMessage('charts:list')
+  async handleChartsList(
+    client: Socket,
+    payload: { conversationId: string },
+  ) {
+    this.logger.log(`[CHARTS:LIST] convId=${payload.conversationId}`);
+    try {
+      const charts = await this.duckdbService.listCharts(payload.conversationId);
+      client.emit('charts:listed', {
+        charts: charts.map((c) => ({
+          chartId: c.chart_id,
+          chartType: c.chart_type,
+          title: c.title,
+          source: c.source,
+          config: c.config,
+          contract: c.contract,
+        })),
+      });
+    } catch (err: any) {
+      this.logger.error(`[CHARTS:LIST] ERROR convId=${payload.conversationId} err=${err.message}`);
+      client.emit('charts:list:error', { message: err.message });
+    }
+  }
+
+  @SubscribeMessage('chart:delete')
+  async handleChartDelete(
+    client: Socket,
+    payload: { chartId: string },
+  ) {
+    this.logger.log(`[CHART:DELETE] chartId=${payload.chartId}`);
+    try {
+      await this.duckdbService.deleteChart(payload.chartId);
+      client.emit('chart:deleted', { chartId: payload.chartId });
+    } catch (err: any) {
+      this.logger.error(`[CHART:DELETE] ERROR chartId=${payload.chartId} err=${err.message}`);
+      client.emit('chart:delete:error', { message: err.message });
     }
   }
 }
